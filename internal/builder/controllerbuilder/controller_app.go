@@ -203,6 +203,12 @@ func controllerVolumes(controller *slinkyv1beta1.Controller, extra []string) []c
 				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
 		},
+		{
+			Name: common.SlurmConfDVolume,
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		},
 	}
 	slices.Sort(extra)
 	for _, name := range extra {
@@ -268,6 +274,7 @@ func (b *ControllerBuilder) slurmctldContainer(merge corev1.Container, clusterNa
 			},
 			VolumeMounts: []corev1.VolumeMount{
 				{Name: common.SlurmEtcVolume, MountPath: common.SlurmEtcDir, ReadOnly: true},
+				{Name: common.SlurmConfDVolume, MountPath: common.SlurmConfDDir, ReadOnly: true},
 				{Name: common.SlurmPidFileVolume, MountPath: common.SlurmPidFileDir},
 				{Name: common.SlurmctldStateSaveVolume, MountPath: clusterSpoolDir(clusterName)},
 				{Name: common.SlurmAuthSocketVolume, MountPath: common.SlurmctldAuthSocketDir},

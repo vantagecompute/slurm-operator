@@ -17,6 +17,9 @@ const (
 	SlurmEtcMountDir = "/mnt/etc/slurm"
 	SlurmEtcDir      = "/etc/slurm"
 
+	SlurmConfDVolume = "slurm-conf-d"
+	SlurmConfDDir    = "/etc/slurm/slurm.conf.d"
+
 	SlurmPidFileVolume = "run"
 	SlurmPidFileDir    = "/run"
 
