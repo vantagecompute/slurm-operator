@@ -61,6 +61,10 @@ func (r *NodeSetReconciler) Sync(ctx context.Context, req reconcile.Request) err
 	nodeset = nodeset.DeepCopy()
 	key := objectutils.KeyFunc(nodeset)
 
+	if nodeset.DeletionTimestamp.IsZero() {
+		durationStore.Push(key, 30*time.Second)
+	}
+
 	if err := r.adoptOrphanRevisions(ctx, nodeset); err != nil {
 		return err
 	}

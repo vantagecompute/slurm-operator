@@ -18,10 +18,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	slinkyv1beta1 "github.com/SlinkyProject/slurm-operator/api/v1beta1"
 	builder "github.com/SlinkyProject/slurm-operator/internal/builder/workerbuilder"
@@ -60,7 +58,7 @@ var (
 	maxConcurrentReconciles = 1
 
 	// this is a short cut for any sub-functions to notify the reconcile how long to wait to requeue
-	durationStore = durationstore.NewDurationStore(durationstore.Greater)
+	durationStore = durationstore.NewDurationStore(durationstore.Less)
 
 	onceBackoffGC     sync.Once
 	failedPodsBackoff = flowcontrol.NewBackOff(1*time.Second, 15*time.Minute)
@@ -72,7 +70,6 @@ type NodeSetReconciler struct {
 	Scheme *runtime.Scheme
 
 	ClientMap *clientmap.ClientMap
-	EventCh   chan event.GenericEvent
 
 	builder        *builder.WorkerBuilder
 	refResolver    *refresolver.RefResolver
@@ -152,7 +149,6 @@ func (r *NodeSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.Service{}).
 		Watches(&corev1.Pod{}, podEventHandler).
 		Watches(&corev1.Node{}, eventhandler.NewNodeEventHandler(r.Client)).
-		WatchesRawSource(source.Channel(r.EventCh, podEventHandler)).
 		Watches(&slinkyv1beta1.Controller{}, eventhandler.NewControllerEventHandler(r.Client)).
 		Watches(&corev1.Secret{}, eventhandler.NewSecretEventHandler(r.Client)).
 		WithOptions(controller.Options{
@@ -161,22 +157,18 @@ func (r *NodeSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func NewReconciler(c client.Client, cm *clientmap.ClientMap, ec chan event.GenericEvent) *NodeSetReconciler {
+func NewReconciler(c client.Client, cm *clientmap.ClientMap) *NodeSetReconciler {
 	s := c.Scheme()
 	es := corev1.EventSource{Component: ControllerName}
 	er := record.NewBroadcaster().NewRecorder(s, es)
 	if cm == nil {
 		panic("ClientMap cannot be nil")
 	}
-	if ec == nil {
-		panic("EventCh cannot be nil")
-	}
 	return &NodeSetReconciler{
 		Client: c,
 		Scheme: s,
 
 		ClientMap: cm,
-		EventCh:   ec,
 
 		builder:        builder.New(c),
 		refResolver:    refresolver.New(c),

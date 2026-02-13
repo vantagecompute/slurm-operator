@@ -18,7 +18,6 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -135,7 +134,6 @@ func main() {
 	}
 
 	clientMap := clientmap.NewClientMap()
-	eventCh := make(chan event.GenericEvent, 100)
 	if err := controller.NewReconciler(mgr.GetClient(), clientMap).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Controller")
 		os.Exit(1)
@@ -148,7 +146,7 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "Accounting")
 		os.Exit(1)
 	}
-	if err := nodeset.NewReconciler(mgr.GetClient(), clientMap, eventCh).SetupWithManager(mgr); err != nil {
+	if err := nodeset.NewReconciler(mgr.GetClient(), clientMap).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "NodeSet")
 		os.Exit(1)
 	}
@@ -156,7 +154,7 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "LoginSet")
 		os.Exit(1)
 	}
-	if err := slurmclient.NewReconciler(mgr.GetClient(), clientMap, eventCh).SetupWithManager(mgr); err != nil {
+	if err := slurmclient.NewReconciler(mgr.GetClient(), clientMap).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "SlurmClient")
 		os.Exit(1)
 	}

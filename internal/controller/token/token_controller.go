@@ -40,7 +40,7 @@ var (
 	maxConcurrentReconciles = 1
 
 	// this is a short cut for any sub-functions to notify the reconcile how long to wait to requeue
-	durationStore = durationstore.NewDurationStore(durationstore.Greater)
+	durationStore = durationstore.NewDurationStore(durationstore.Less)
 
 	onceBackoffGC     sync.Once
 	failedPodsBackoff = flowcontrol.NewBackOff(1*time.Second, 15*time.Minute)

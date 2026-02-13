@@ -16,7 +16,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
-	"sigs.k8s.io/controller-runtime/pkg/event"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -85,9 +84,8 @@ var _ = BeforeSuite(func() {
 	})
 	Expect(err).ToNot(HaveOccurred())
 
-	eventCh := make(chan event.GenericEvent, 10)
 	clientMap = clientmap.NewClientMap()
-	err = NewReconciler(k8sManager.GetClient(), clientMap, eventCh).SetupWithManager(k8sManager)
+	err = NewReconciler(k8sManager.GetClient(), clientMap).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
 	err = controller.NewReconciler(k8sManager.GetClient(), clientMap).SetupWithManager(k8sManager)

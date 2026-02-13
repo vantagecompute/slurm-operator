@@ -11,7 +11,6 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8slabels "k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
@@ -27,14 +26,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	slurmclient "github.com/SlinkyProject/slurm-client/pkg/client"
-	slurmtypes "github.com/SlinkyProject/slurm-client/pkg/types"
-
 	slinkyv1beta1 "github.com/SlinkyProject/slurm-operator/api/v1beta1"
 	"github.com/SlinkyProject/slurm-operator/internal/builder/labels"
 	nodesetutils "github.com/SlinkyProject/slurm-operator/internal/controller/nodeset/utils"
 	"github.com/SlinkyProject/slurm-operator/internal/utils/objectutils"
-	"github.com/SlinkyProject/slurm-operator/internal/utils/podinfo"
 )
 
 func NewPodEventHandler(reader client.Reader, expectations *kubecontroller.UIDTrackingControllerExpectations) *PodEventHandler {
@@ -328,57 +323,4 @@ func (e *PodEventHandler) getPodNodeSets(ctx context.Context, pod *corev1.Pod) [
 			"Pod", klog.KObj(pod), "NodeSets", nsMatched)
 	}
 	return nsMatched
-}
-
-// SetEventHandler is a helper function to make slurm node updates propagate to
-// the nodeset controller via configured event channel.
-func SetEventHandler(client slurmclient.Client, eventCh chan event.GenericEvent) {
-	informer := client.GetInformer(slurmtypes.ObjectTypeV0044Node)
-	informer.SetEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
-			node, ok := obj.(*slurmtypes.V0044Node)
-			if !ok {
-				return
-			}
-			podInfo := podinfo.PodInfo{}
-			_ = podinfo.ParseIntoPodInfo(node.Comment, &podInfo)
-			eventCh <- podEvent(podInfo)
-		},
-		UpdateFunc: func(oldObj, newObj interface{}) {
-			oldNode, ok := oldObj.(*slurmtypes.V0044Node)
-			if !ok {
-				return
-			}
-			newNode, ok := newObj.(*slurmtypes.V0044Node)
-			if !ok {
-				return
-			}
-			if apiequality.Semantic.DeepEqual(newNode.State, oldNode.State) {
-				return
-			}
-			podInfo := podinfo.PodInfo{}
-			_ = podinfo.ParseIntoPodInfo(newNode.Comment, &podInfo)
-			eventCh <- podEvent(podInfo)
-		},
-		DeleteFunc: func(obj interface{}) {
-			node, ok := obj.(*slurmtypes.V0044Node)
-			if !ok {
-				return
-			}
-			podInfo := podinfo.PodInfo{}
-			_ = podinfo.ParseIntoPodInfo(node.Comment, &podInfo)
-			eventCh <- podEvent(podInfo)
-		},
-	})
-}
-
-func podEvent(podInfo podinfo.PodInfo) event.GenericEvent {
-	return event.GenericEvent{
-		Object: &corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Namespace: podInfo.Namespace,
-				Name:      podInfo.PodName,
-			},
-		},
-	}
 }

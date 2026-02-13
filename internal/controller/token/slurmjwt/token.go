@@ -13,12 +13,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/uuid"
 )
 
-const (
-	// Slurm defines `lifetime=infinite` as this.
-	// Ref: https://github.com/SchedMD/slurm/blob/master/src/scontrol/scontrol.c#L1003
-	infinite = math.MaxInt32 - 1
-)
-
 type Token struct {
 	signingKey []byte
 	method     jwt.SigningMethod
@@ -31,12 +25,16 @@ func NewToken(signingKey []byte) *Token {
 		signingKey: signingKey,
 		method:     jwt.SigningMethodHS256,
 		username:   "slurm",
-		lifetime:   infinite * time.Second,
+		lifetime:   time.Hour,
 	}
 }
 
+// Slurm defines `lifetime=infinite` as this.
+// Ref: https://github.com/SchedMD/slurm/blob/master/src/scontrol/scontrol.c#L1001
+const slurmInfinite = math.MaxInt32 - 1
+
 func (t *Token) WithLifetime(lifetime time.Duration) *Token {
-	t.lifetime = mathutils.Clamp(lifetime, 0, infinite*time.Second)
+	t.lifetime = mathutils.Clamp(lifetime, 0, slurmInfinite*time.Second)
 	return t
 }
 
