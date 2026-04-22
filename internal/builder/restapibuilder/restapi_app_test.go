@@ -7,13 +7,17 @@ import (
 	_ "embed"
 	"testing"
 
-	slinkyv1beta1 "github.com/SlinkyProject/slurm-operator/api/v1beta1"
-	"github.com/SlinkyProject/slurm-operator/internal/builder/labels"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	"k8s.io/utils/set"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	slinkyv1beta1 "github.com/SlinkyProject/slurm-operator/api/v1beta1"
+	"github.com/SlinkyProject/slurm-operator/internal/builder/common"
+	controllerbuilder "github.com/SlinkyProject/slurm-operator/internal/builder/controllerbuilder"
+	"github.com/SlinkyProject/slurm-operator/internal/builder/labels"
 )
 
 func TestBuilder_BuildRestapi(t *testing.T) {
@@ -107,6 +111,78 @@ func TestBuilder_BuildRestapi(t *testing.T) {
 			case got.Spec.Template.Spec.Containers[0].Ports[0].ContainerPort != SlurmrestdPort:
 				t.Errorf("Template.Spec.Containers[0].Ports[0].ContainerPort = %v , want = %v",
 					got.Spec.Template.Spec.Containers[0].Ports[0].Name, SlurmrestdPort)
+			}
+		})
+	}
+}
+
+func Test_restapiVolumes(t *testing.T) {
+	jwtRef := corev1.SecretKeySelector{
+		LocalObjectReference: corev1.LocalObjectReference{Name: "slurm-auth-jwt"},
+		Key:                  "jwt.key",
+	}
+	jwksRef := &corev1.ConfigMapKeySelector{
+		LocalObjectReference: corev1.LocalObjectReference{Name: "keycloak-jwks"},
+		Key:                  "jwks.json",
+	}
+
+	tests := []struct {
+		name       string
+		controller *slinkyv1beta1.Controller
+		wantPaths  []string
+	}{
+		{
+			name: "slurm.conf + slurm.key + jwt.key (no jwks)",
+			controller: &slinkyv1beta1.Controller{
+				ObjectMeta: metav1.ObjectMeta{Name: "slurm"},
+				Spec: slinkyv1beta1.ControllerSpec{
+					SlurmKeyRef: corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: "slurm-auth-slurm"},
+						Key:                  "slurm.key",
+					},
+					JwtKeyRef: &jwtRef,
+				},
+			},
+			wantPaths: []string{controllerbuilder.SlurmConfFile, common.SlurmKeyFile, common.JwtKeyFile},
+		},
+		{
+			name: "adds jwks.json when JwksKeyRef set",
+			controller: &slinkyv1beta1.Controller{
+				ObjectMeta: metav1.ObjectMeta{Name: "slurm"},
+				Spec: slinkyv1beta1.ControllerSpec{
+					SlurmKeyRef: corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: "slurm-auth-slurm"},
+						Key:                  "slurm.key",
+					},
+					JwtKeyRef:  &jwtRef,
+					JwksKeyRef: jwksRef,
+				},
+			},
+			wantPaths: []string{controllerbuilder.SlurmConfFile, common.SlurmKeyFile, common.JwtKeyFile, common.JwksKeyFile},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			vols := restapiVolumes(tt.controller)
+			if len(vols) != 1 || vols[0].Name != common.SlurmEtcVolume {
+				t.Fatalf("expected a single %q volume, got %+v", common.SlurmEtcVolume, vols)
+			}
+			got := set.New[string]()
+			for _, s := range vols[0].Projected.Sources {
+				switch {
+				case s.ConfigMap != nil:
+					for _, i := range s.ConfigMap.Items {
+						got.Insert(i.Path)
+					}
+				case s.Secret != nil:
+					for _, i := range s.Secret.Items {
+						got.Insert(i.Path)
+					}
+				}
+			}
+			want := set.New(tt.wantPaths...)
+			if !got.Equal(want) {
+				t.Errorf("projected paths = %v, want %v", got.UnsortedList(), want.UnsortedList())
 			}
 		})
 	}

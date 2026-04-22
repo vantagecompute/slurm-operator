@@ -119,39 +119,71 @@ func (b *RestapiBuilder) restapiPodTemplate(restapi *slinkyv1beta1.RestApi) (cor
 }
 
 func restapiVolumes(controller *slinkyv1beta1.Controller) []corev1.Volume {
-	out := []corev1.Volume{
+	sources := []corev1.VolumeProjection{
+		{
+			ConfigMap: &corev1.ConfigMapProjection{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: controller.ConfigKey().Name,
+				},
+				Items: []corev1.KeyToPath{
+					{Key: controllerbuilder.SlurmConfFile, Path: controllerbuilder.SlurmConfFile},
+				},
+			},
+		},
+		{
+			Secret: &corev1.SecretProjection{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: controller.AuthSlurmRef().Name,
+				},
+				Items: []corev1.KeyToPath{
+					{Key: controller.AuthSlurmRef().Key, Path: common.SlurmKeyFile},
+				},
+			},
+		},
+	}
+
+	// slurmrestd runs with SLURM_JWT=daemon (set unconditionally in slurmrestdContainer),
+	// which signs the daemon credential for RPCs to slurmctld with the shared jwt.key.
+	// Without this mount, every auth-requiring RPC fails
+	// ESLURM_PROTOCOL_AUTHENTICATION_ERROR (1007) — /ping still works because slurmctld
+	// handles REQUEST_PING without a full auth check. The Controller already projects the
+	// same secret at /etc/slurm/jwt.key; mirror it here so slurmrestd can sign tokens.
+	if jwtRef := controller.AuthJwtRef(); jwtRef.Name != "" {
+		sources = append(sources, corev1.VolumeProjection{
+			Secret: &corev1.SecretProjection{
+				LocalObjectReference: corev1.LocalObjectReference{Name: jwtRef.Name},
+				Items: []corev1.KeyToPath{
+					{Key: jwtRef.Key, Path: common.JwtKeyFile},
+				},
+			},
+		})
+	}
+
+	// Mirror the Controller's JWKS projection so slurmrestd's rest_auth/jwt plugin can
+	// verify user-presented OIDC/Keycloak JWTs against the same JWKS slurmctld uses.
+	// Only mounted when JwksKeyRef is set on the Controller (jwksKeys.enabled=true).
+	if jwksRef := controller.AuthJwksRef(); jwksRef != nil && jwksRef.Name != "" {
+		sources = append(sources, corev1.VolumeProjection{
+			ConfigMap: &corev1.ConfigMapProjection{
+				LocalObjectReference: corev1.LocalObjectReference{Name: jwksRef.Name},
+				Items: []corev1.KeyToPath{
+					{Key: jwksRef.Key, Path: common.JwksKeyFile},
+				},
+			},
+		})
+	}
+
+	return []corev1.Volume{
 		{
 			Name: common.SlurmEtcVolume,
 			VolumeSource: corev1.VolumeSource{
 				Projected: &corev1.ProjectedVolumeSource{
 					DefaultMode: ptr.To[int32](0o600),
-					Sources: []corev1.VolumeProjection{
-						{
-							ConfigMap: &corev1.ConfigMapProjection{
-								LocalObjectReference: corev1.LocalObjectReference{
-									Name: controller.ConfigKey().Name,
-								},
-								Items: []corev1.KeyToPath{
-									{Key: controllerbuilder.SlurmConfFile, Path: controllerbuilder.SlurmConfFile},
-								},
-							},
-						},
-						{
-							Secret: &corev1.SecretProjection{
-								LocalObjectReference: corev1.LocalObjectReference{
-									Name: controller.AuthSlurmRef().Name,
-								},
-								Items: []corev1.KeyToPath{
-									{Key: controller.AuthSlurmRef().Key, Path: common.SlurmKeyFile},
-								},
-							},
-						},
-					},
+					Sources:     sources,
 				},
 			},
 		},
 	}
-	return out
 }
 
 func (b *RestapiBuilder) slurmrestdContainer(merge corev1.Container, hasAccounting bool) corev1.Container {
