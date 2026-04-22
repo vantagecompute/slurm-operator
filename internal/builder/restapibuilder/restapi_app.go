@@ -27,15 +27,8 @@ import (
 const (
 	SlurmrestdPort = 6820
 
-	// Run slurmrestd as the SlurmUser (uid 401). Required for auth/jwt daemon-mode
-	// signing: Slurm refuses to load /etc/slurm/jwt.key unless the file is owned by
-	// SlurmUser AND the reading process itself runs as SlurmUser (mode 0600). With
-	// the previous value (65534/nobody), every auth-requiring RPC to slurmctld
-	// failed ESLURM_PROTOCOL_AUTHENTICATION_ERROR (1007) because slurmrestd couldn't
-	// build a valid daemon credential locally. The upstream slurmrestd image ships
-	// with a `slurm` user (uid 401, gid 401).
-	slurmrestdUser    = "slurm"
-	slurmrestdUserUid = int64(401)
+	slurmrestdUser    = "nobody"
+	slurmrestdUserUid = int64(65534)
 	slurmrestdUserGid = slurmrestdUserUid
 )
 
